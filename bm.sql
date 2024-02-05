@@ -33,7 +33,8 @@ create table if not EXISTS books(
 	updated_chapter TEXT,
 	last_update_date TEXT DEFAULT CURRENT_DATE,
 	website TEXT,
-	comment TEXT
+	comment TEXT,
+	UNIQUE(url,name)
 );
 
 create table if not EXISTS book_tag(
