@@ -1,4 +1,4 @@
-from PyQt5.QtCore import pyqtSignal,QObject
+from PyQt5.QtCore import pyqtSignal, QObject
 
 
 class Filter(QObject):
@@ -10,14 +10,13 @@ class Filter(QObject):
         self.status = None
         self.score = []
         self.tags = []
-        self.readStatus=None
+        self.etags = []
+        self.readStatus = None
         self.query = query
 
     def isEmpty(self):
-        if (self.searchContents == []) and (self.status is None) and (self.score == []) and (self.tags == []):
-            return True
-        else:
-            return False
+        return (self.searchContents == []) and (self.status is None) and (self.score == []) and (self.tags == []) and (
+                    self.etags == [])
 
     def getSearchContentSql(self, colList):
         cols = "||".join(f"ifnull(`{col}`,0)" for col in colList)
@@ -32,15 +31,15 @@ class Filter(QObject):
     def getTagFilterSql(self):
         bookIds = []
         tags = "'" + "', '".join(self.tags) + "'"
-        bookSql = f"select DISTINCT book_id from book_tag where tag_id in (select tag_id from tags where tag_name in ({tags}))"
-        print(bookSql)
+        etags="'" + "', '".join(self.etags) + "'"
+        bookSql = f"select DISTINCT book_id from book_tag where tag_id in (select tag_id from tags where tag_name in ({tags})) and tag_id not in (select tag_id from tags where tag_name in ({etags})) "
         if self.query.exec(bookSql):
             while self.query.next():
                 bookIds.append(self.query.value(0))
         else:
             self.searchContents.emit()
         if bookIds:
-            return f" book_id in ({', '.join(map(str,bookIds))}) "
+            return f" book_id in ({', '.join(map(str, bookIds))}) "
         return " 1=2 "
 
     def printAll(self):
@@ -49,5 +48,5 @@ class Filter(QObject):
         print(f"readStatus:{self.readStatus}")
         print(f"score:{self.score}")
         print(f"tags:{self.tags}")
-        print(f"tag sql:"+self.getTagFilterSql())
-
+        print(f"etags:{self.etags}")
+        print(f"tag sql:" + self.getTagFilterSql())

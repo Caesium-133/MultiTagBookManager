@@ -1,5 +1,5 @@
 from Ui_mainWindow import Ui_MainWindow
-from PyQt5.QtWidgets import QMainWindow, QMessageBox, QCompleter
+from PyQt5.QtWidgets import QMainWindow, QMessageBox, QCompleter, QComboBox
 from PyQt5.QtCore import Qt, QStringListModel, QUrl
 from PyQt5 import QtSql
 from PyQt5.QtSql import QSqlQuery, QSqlTableModel, QSqlRelationalTableModel, QSqlRelation, QSqlRelationalDelegate
@@ -13,6 +13,7 @@ from win32com.shell import shell, shellcon
 import pathlib
 import sqlite3
 import sys
+from CmbDelegate import CmbDelegate
 
 bundle_dir = getattr(sys, '_MEIPASS', os.path.abspath(os.path.dirname(__file__)))
 path_to_sql = os.path.abspath(os.path.join(bundle_dir, 'bm.sql'))
@@ -32,6 +33,7 @@ class mainWindow(QMainWindow, Ui_MainWindow):
         self.tagAttrs = ['tag_id', 'tag_name']
         self.tagList = []
         self.filterTagList = []
+        self.filterEtagList=[]
         self.currentBookId = None
         self.currentTagRow = None
         self.currentPage = 0
@@ -66,8 +68,11 @@ class mainWindow(QMainWindow, Ui_MainWindow):
         self.spinBox_m_f_score_from.setValue(0)
         self.spinBox_m_f_score_to.setValue(5)
         self.comboBox_m_f_tag.addItems(self.tagList)
+        self.comboBox_m_f_etag.addItems(self.tagList)
         self.stringListModelTagFilter = QStringListModel()
+        self.stringListModelETagFilter=QStringListModel()
         self.listView_m_f_tags.setModel(self.stringListModelTagFilter)
+        self.listView_m_f_etags.setModel(self.stringListModelETagFilter)
 
         self.pushButton_m_search.clicked.connect(self.onMainSearchBtnClicked)
         self.tableView_m_item_list.clicked.connect(
@@ -89,6 +94,9 @@ class mainWindow(QMainWindow, Ui_MainWindow):
         self.pushButton_m_f_addTag.clicked.connect(self.onMainFilterTagAddBtnClicked)
         self.pushButton_m_f_clearTag.clicked.connect(self.onMainFilterTagClearBtnClicked)
         self.pushButton_m_f_rmTag.clicked.connect(self.onMainFilterTagRmBtnClicked)
+        self.pushButton_m_f_addeTag.clicked.connect(self.onMainFilterETagAddBtnClicked)
+        self.pushButton_m_f_cleareTag.clicked.connect(self.onMainFilterETagClearBtnClicked)
+        self.pushButton_m_f_rmeTag.clicked.connect(self.onMainFilterETagRmBtnClicked)
         self.pushButton_m_f_filter.clicked.connect(self.onMainFilterConfirmBtnClicked)
 
     def db_connect(self):
@@ -144,6 +152,10 @@ class mainWindow(QMainWindow, Ui_MainWindow):
         self.tableView_m_item_list.setAutoScroll(True)
         self.tableView_m_item_list.setAlternatingRowColors(True)
         self.tableView_m_item_list.horizontalHeader().setStyleSheet("QHeaderView::section{background:white;}")
+        statusCol=self.bookAttrs.index("状态")
+        readCol=self.bookAttrs.index("阅读状态")
+        self.tableView_m_item_list.setItemDelegateForColumn(statusCol,CmbDelegate(statusCol,read=False,parent=self))
+        self.tableView_m_item_list.setItemDelegateForColumn(readCol,CmbDelegate(readCol,read=True,parent=self))
 
         self.updateSqlTableModel()
 
@@ -250,7 +262,7 @@ class mainWindow(QMainWindow, Ui_MainWindow):
                 sql=sql+f" and read_status='{self.filters.readStatus}'"
             if self.filters.score:
                 sql = sql + f" and rating>={self.filters.score[0]} and rating<={self.filters.score[1]} "
-            if self.filters.tags:
+            if self.filters.tags or self.filters.etags:
                 sql = sql + f" and " + self.filters.getTagFilterSql()
             sql = sql + f" order by `{self.tableSortField}` {self.tableSortDirect} "
         if count:
@@ -416,20 +428,26 @@ class mainWindow(QMainWindow, Ui_MainWindow):
         self.jump2page(0)
 
     # 筛选操作===============================================================================
+    def updateFilterTagCombobox(self):
+        self.comboBox_m_f_tag.clear()
+        self.comboBox_m_f_tag.addItems(
+            sorted(list(set(self.tagList) - set(self.filterTagList) - set(self.filterEtagList))))
+        self.comboBox_m_f_etag.clear()
+        self.comboBox_m_f_etag.addItems(
+            sorted(list(set(self.tagList) - set(self.filterEtagList) - set(self.filterTagList))))
+
     def onMainFilterTagAddBtnClicked(self):
         selectedTag = self.comboBox_m_f_tag.currentText()
         if selectedTag in self.filterTagList:
             return
         self.filterTagList.append(selectedTag)
         self.stringListModelTagFilter.setStringList(self.filterTagList)
-        self.comboBox_m_f_tag.clear()
-        self.comboBox_m_f_tag.addItems(sorted(list(set(self.tagList) - set(self.filterTagList))))
+        self.updateFilterTagCombobox()
 
     def onMainFilterTagClearBtnClicked(self):
         self.filterTagList = []
         self.stringListModelTagFilter.setStringList(self.filterTagList)
-        self.comboBox_m_f_tag.clear()
-        self.comboBox_m_f_tag.addItems(self.tagList)
+        self.updateFilterTagCombobox()
 
     def onMainFilterTagRmBtnClicked(self):
         row = self.listView_m_f_tags.currentIndex().row()
@@ -438,7 +456,30 @@ class mainWindow(QMainWindow, Ui_MainWindow):
         tag2rm = self.stringListModelTagFilter.itemData(self.stringListModelTagFilter.index(row))[Qt.DisplayRole]
         self.filterTagList.remove(tag2rm)
         self.stringListModelTagFilter.setStringList(self.filterTagList)
-        self.comboBox_m_f_tag.addItem(tag2rm)
+        self.updateFilterTagCombobox()
+
+    def onMainFilterETagAddBtnClicked(self):
+        selectedETag = self.comboBox_m_f_etag.currentText()
+        if selectedETag in self.filterEtagList:
+            return
+        self.filterEtagList.append(selectedETag)
+        self.stringListModelETagFilter.setStringList(self.filterEtagList)
+        self.updateFilterTagCombobox()
+
+
+    def onMainFilterETagClearBtnClicked(self):
+        self.filterEtagList = []
+        self.stringListModelETagFilter.setStringList(self.filterEtagList)
+        self.updateFilterTagCombobox()
+
+    def onMainFilterETagRmBtnClicked(self):
+        row = self.listView_m_f_etags.currentIndex().row()
+        if row == -1:
+            QMessageBox.information(self, "提示", "点击要移除的标签", QMessageBox.Ok)
+        tag2rm = self.stringListModelETagFilter.itemData(self.stringListModelETagFilter.index(row))[Qt.DisplayRole]
+        self.filterEtagList.remove(tag2rm)
+        self.stringListModelETagFilter.setStringList(self.filterEtagList)
+        self.updateFilterTagCombobox()
 
     def onMainFilterConfirmBtnClicked(self):
         curstatus = self.comboBox_m_f_status.currentText()
@@ -458,6 +499,10 @@ class mainWindow(QMainWindow, Ui_MainWindow):
         for i in range(self.stringListModelTagFilter.rowCount()):
             self.filters.tags.append(
                 self.stringListModelTagFilter.itemData(self.stringListModelTagFilter.index(i))[Qt.DisplayRole])
+        self.filters.etags.clear()
+        for i in range(self.stringListModelETagFilter.rowCount()):
+            self.filters.etags.append(
+                self.stringListModelETagFilter.itemData(self.stringListModelETagFilter.index(i))[Qt.DisplayRole])
         self.generateTableSql()
         self.sqlTableModel.setQuery(QSqlQuery(self.pageSql()))
         self.updateSqlTableModel()
